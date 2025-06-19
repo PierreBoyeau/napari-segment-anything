@@ -21,7 +21,7 @@ class SAMWidget(Container):
     _sam: Sam
     _predictor: SamPredictor
 
-    def __init__(self, viewer: napari.Viewer, model_type: str = "default"):
+    def __init__(self, viewer: napari.Viewer, model_type: str = "vit_b"):
         super().__init__()
         self._viewer = viewer
         if torch.cuda.is_available():
@@ -31,9 +31,15 @@ class SAMWidget(Container):
         else:
             self._device = "cpu"
 
+        models = [
+            "vit_b",
+            "default",
+            "vit_h",
+            "vit_l",
+        ]
         self._model_type_widget = ComboBox(
             value=model_type,
-            choices=list(sam_model_registry.keys()),
+            choices=models,
             label="Model:",
         )
         self._model_type_widget.changed.connect(self._load_model)
@@ -128,7 +134,8 @@ class SAMWidget(Container):
         self._image = util.img_as_ubyte(image)
 
         self._mask_layer.data = np.zeros(self._image.shape[:2], dtype=int)
-        self._labels_layer.data = np.zeros(self._image.shape[:2], dtype=int)
+        if (self._labels_layer.data == 0).all():
+            self._labels_layer.data = np.zeros(self._image.shape[:2], dtype=int)
         self._predictor.set_image(self._image)
 
     def _mouse_button_modifier(self, _: Points, event) -> None:
@@ -188,7 +195,13 @@ class SAMWidget(Container):
     def _on_auto_run(self) -> None:
         if self._image is None:
             return
-        mask_gen = SamAutomaticMaskGenerator(self._sam)
+        mask_gen = SamAutomaticMaskGenerator(
+            self._sam,
+            # crop_n_layers=1,
+            # points_per_side=48,
+            # points_per_side=64,
+            # points_per_batch=128,
+        )
         preds = mask_gen.generate(self._image)
 
         labels = self._labels_layer.data
